@@ -1,0 +1,78 @@
+service: leadtailor-sns
+
+plugins:
+  - serverless-plugin-typescript
+  - serverless-dotenv-plugin
+  - serverless-plugin-scripts
+
+provider:
+  name: aws
+  runtime: nodejs18.x
+  versionFunctions: false
+  region: ap-southeast-1
+  stage_default: local
+  stage: ${opt:stage, self:provider.stage_default}
+  environment: ${file(serverless-env.yml):${self:provider.stage}}
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - sns:*
+      Resource: "*"
+    - Effect: Allow
+      Action:
+        - sqs:*
+      Resource: "*"
+
+
+custom:
+  scripts:
+    hooks:
+      "deploy:finalize": prisma generate
+
+package:
+  patterns:
+    - '!node_modules/.prisma/client/libquery_engine-*'
+    - 'node_modules/.prisma/client/libquery_engine-rhel-*'
+    - '!node_modules/prisma/libquery_engine-*'
+    - 'node_modules/@prisma/engines/**'
+    
+functions:
+  publish:
+    handler: handlers/publish.handler
+    events:
+      - http:
+          method: POST
+          path: /publish
+  
+  storyCreation:
+    handler: handlers/storyCreation.handler
+    timeout: 900
+    events:
+      - sns:
+          arn: arn:aws:sns:ap-southeast-1:244772785262:story_creation
+          topicName: story_creation
+  
+  sendEmail:
+    handler: handlers/sendEmail.handler
+    timeout: 900
+    events:
+      - sns:
+          arn: arn:aws:sns:ap-southeast-1:244772785262:send_email
+          topicName: send_email
+
+  dlqHandler:
+    handler: handlers/dlqHandler.handler
+    timeout: 600
+    events:
+      - sqs:
+          arn: arn:aws:sqs:ap-southeast-1:244772785262:campaign-generation-dlq
+      
+  scriptGeneration:
+    handler: handlers/scriptGeneration.handler
+    timeout: 900
+    events:
+      - sqs:
+          arn: arn:aws:sqs:ap-southeast-1:244772785262:campaign-generate-script
+  
+  
+    
